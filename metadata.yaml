@@ -1,0 +1,7 @@
+name: astrbot_plugin_server_status
+display_name: 服务器状态监控
+desc: 在聊天中发送 /status 或 /状态，返回一张竖屏手机版的状态卡片图片，包含 CPU、内存、磁盘、网络速率、磁盘 IO、进程 TOP 等实时指标。纯 Pillow 本地渲染，无需浏览器。
+short_desc: 一条指令，返回一张竖屏服务器实时状态图。
+version: v1.1.0
+author: Summer-Ever
+repo: https://github.com/Summer-Ever/astrbot_plugin_server_status

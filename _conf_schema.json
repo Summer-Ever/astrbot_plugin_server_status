@@ -1,0 +1,104 @@
+{
+  "render_mode": {
+    "description": "返回形式",
+    "type": "string",
+    "default": "image",
+    "options": ["image", "text"],
+    "labels": ["图片卡片", "纯文本"],
+    "hint": "选择以图片还是纯文本返回状态。渲染失败时会自动回落为纯文本。"
+  },
+  "theme": {
+    "description": "图片主题",
+    "type": "string",
+    "default": "dark",
+    "options": ["dark", "light"],
+    "labels": ["深色", "浅色"]
+  },
+  "accent_color": {
+    "description": "主题强调色",
+    "type": "string",
+    "default": "",
+    "hint": "十六进制颜色，如 #548CFF。留空使用主题默认色。",
+    "obvious_hint": false
+  },
+  "send_mode": {
+    "description": "图片发送方式",
+    "type": "string",
+    "default": "base64",
+    "options": ["base64", "file"],
+    "labels": ["base64（推荐）", "本地文件"],
+    "hint": "若协议端（如 NapCat）与 AstrBot 不在同一台机器，选 base64 通常更可靠；若 base64 发送异常可切换为本地文件。"
+  },
+  "admin_only": {
+    "description": "仅管理员可用",
+    "type": "bool",
+    "default": false
+  },
+  "cooldown_seconds": {
+    "description": "同一会话冷却时间（秒）",
+    "type": "int",
+    "default": 5,
+    "slider": { "min": 0, "max": 60, "step": 1 }
+  },
+  "sample_interval": {
+    "description": "系统采样间隔（秒）",
+    "type": "float",
+    "default": 0.5,
+    "slider": { "min": 0.3, "max": 2.0, "step": 0.1 },
+    "hint": "两次采样之间隔多久，用于计算 CPU 与网络/磁盘的瞬时速率。越大越准，响应稍慢。"
+  },
+  "show_disk_partitions": {
+    "description": "显示磁盘分区列表",
+    "type": "bool",
+    "default": true
+  },
+  "max_disk_partitions": {
+    "description": "磁盘分区最多显示数量",
+    "type": "int",
+    "default": 4,
+    "slider": { "min": 1, "max": 8, "step": 1 }
+  },
+  "show_processes": {
+    "description": "显示进程占用 TOP",
+    "type": "bool",
+    "default": true
+  },
+  "process_top_n": {
+    "description": "进程 TOP 数量",
+    "type": "int",
+    "default": 5,
+    "slider": { "min": 3, "max": 10, "step": 1 }
+  },
+  "process_refresh_interval": {
+    "description": "进程缓存刷新间隔（秒）",
+    "type": "int",
+    "default": 60,
+    "slider": { "min": 15, "max": 300, "step": 5 },
+    "hint": "进程列表来自后台定时缓存（Windows 上实时遍历进程表非常慢），间隔越小数据越新、后台开销越大。"
+  },
+  "image_width": {
+    "description": "图片宽度（像素）",
+    "type": "int",
+    "default": 720,
+    "slider": { "min": 480, "max": 1080, "step": 20 },
+    "hint": "竖屏卡片设计宽度，720 在手机上显示效果最佳。"
+  },
+  "render_scale": {
+    "description": "超采样倍率",
+    "type": "float",
+    "default": 2.0,
+    "slider": { "min": 1.0, "max": 3.0, "step": 0.5 },
+    "hint": "抗锯齿精度，2 表示先按两倍尺寸绘制再缩小。越高越清晰，渲染越慢。"
+  },
+  "font_path": {
+    "description": "自定义字体路径",
+    "type": "string",
+    "default": "",
+    "hint": "填写 .ttf/.ttc/.otf 字体文件的完整路径。留空则自动查找系统中文字体。"
+  },
+  "footer_text": {
+    "description": "自定义页脚文字",
+    "type": "string",
+    "default": ""
+  }
+}
