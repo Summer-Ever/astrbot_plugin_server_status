@@ -40,6 +40,14 @@
     "default": 5,
     "slider": { "min": 0, "max": 60, "step": 1 }
   },
+  "cpu_metric": {
+    "description": "CPU 占用统计方式",
+    "type": "string",
+    "default": "utility",
+    "options": ["utility", "time"],
+    "labels": ["任务管理器口径（推荐）", "时间占比"],
+    "hint": "任务管理器从 Windows 8 起显示的是 % Processor Utility（按频率折算），混合架构 CPU 上会比时间占比高好几倍。选「任务管理器口径」可与任务管理器数字对齐，非 Windows 平台会自动回落到时间占比。"
+  },
   "sample_interval": {
     "description": "系统采样间隔（秒）",
     "type": "float",

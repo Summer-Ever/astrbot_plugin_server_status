@@ -121,9 +121,14 @@ class ServerStatusPlugin(Star):
 
         # --- 采集 ---
         sample_interval = float(self.config.get("sample_interval", 0.5) or 0.5)
+        cpu_metric = str(self.config.get("cpu_metric", "utility") or "utility")
         try:
             data = await asyncio.to_thread(
-                collector.collect, sample_interval, False, 0
+                collector.collect,
+                sample_interval,
+                False,
+                0,
+                cpu_metric,
             )
         except Exception as exc:
             logger.error(f"[server_status] 采集失败: {exc}")

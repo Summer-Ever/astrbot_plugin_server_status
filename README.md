@@ -70,6 +70,7 @@ sudo yum install wqy-microhei-fonts
 | `send_mode` | `base64` | 图片以 base64 还是本地文件方式发送 |
 | `admin_only` | `false` | 是否仅管理员可用 |
 | `cooldown_seconds` | `5` | 同一会话的查询冷却时间 |
+| `cpu_metric` | `utility` | CPU 占用统计方式：`utility`（任务管理器口径，推荐）或 `time`（时间占比） |
 | `sample_interval` | `0.5` | 系统采样间隔（秒），用于计算瞬时速率 |
 | `show_disk_partitions` / `max_disk_partitions` | `true` / `4` | 磁盘分区列表 |
 | `show_processes` / `process_top_n` | `true` / `5` | 进程占用 TOP |
@@ -83,6 +84,10 @@ sudo yum install wqy-microhei-fonts
 
 - **速率类指标（CPU / 网络 / 磁盘 IO）实时计算**：每次查询做一次 0.5s 的双采样取差值，
   保证数值是"现在"的瞬时值，而不是开机以来的平均值。
+- **CPU 占用默认用任务管理器同款口径（% Processor Utility）**：Windows 8+ 的任务管理器显示的不是
+  时间占比，而是按频率折算的 Utility；混合架构 CPU（P 核 + E 核）上两者能差 5~7 倍（实测同机 4% vs 30%）。
+  默认 `utility` 与任务管理器对齐；想看与 top / htop / 宝塔一致的时间占比可改回 `time`。
+- **CPU 读取不占性能**：无任何后台线程，只在查询的那 0.5 秒内采样，平时完全空闲。
 - **CPU 占用用 `cpu_times()` 自算差值**：`psutil.cpu_percent(interval=None)` 依赖进程内的全局时间戳缓存，
   只要别的插件或 AstrBot 面板在采样窗口内也调用一次，基准点就会被重置，导致稳定读出 0%。
   这里改用无状态的 `cpu_times()` 计算忙碌时间占比，不受其他代码干扰。
@@ -106,6 +111,7 @@ sudo yum install wqy-microhei-fonts
 
 ## 更新日志
 
+- `v1.1.1` CPU 占用改用任务管理器同口径（% Processor Utility，可配置），修复与任务管理器数字对不上的问题；采样零后台开销。
 - `v1.1.0` 改为竖屏手机版式；修复 CPU 占用偶发显示 0% 的采样问题；频率改为「当前 / 最高」显示；
   移除交换分区与系统概况区块。
 - `v1.0.0` 首个版本：环形仪表状态卡片、中文指令别名、深浅主题、进程 TOP 缓存、文本回落。

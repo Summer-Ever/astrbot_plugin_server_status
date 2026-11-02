@@ -216,6 +216,96 @@ def _usage_between(before, after) -> float:
     return max(min(busy_delta / total_delta * 100.0, 100.0), 0.0)
 
 
+# --------------------------------------------------------------------------- #
+# 两种 CPU 口径
+#
+# % Processor Time（本模块自己算的时间占比）= CPU 有多少时间不在跑 idle，
+# 与 top / htop / psutil / 宝塔面板一致。
+#
+# % Processor Utility（任务管理器从 Windows 8 起显示的「CPU」）= 时间占比再按
+# 当前频率折算。混合架构 CPU（如 i5-1240P 的 P 核 + E 核）上两者能差 5~7 倍，
+# 实测同一时刻 4% vs 30%。用户拿卡片和任务管理器对照就会觉得数字不对，
+# 所以这里把两种都提供，由 cpu_metric 配置项决定用哪个。
+# --------------------------------------------------------------------------- #
+
+_PDH_FMT_DOUBLE = 0x00000200
+_PDH_CSTATUS_OK = (0, 1)  # VALID_DATA / NEW_DATA
+_UTILITY_COUNTER_PATH = r"\Processor Information(_Total)\% Processor Utility"
+
+
+class _UtilityCounter:
+    """读取任务管理器同口径的 % Processor Utility（仅 Windows 有效）。"""
+
+    def __init__(self):
+        self._parts = self._open()
+        self._broken = self._parts is None
+
+    @staticmethod
+    def _open():
+        if os.name != "nt":
+            return None
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _Value(ctypes.Structure):
+                _fields_ = [
+                    ("CStatus", wintypes.DWORD),
+                    ("doubleValue", ctypes.c_double),
+                ]
+
+            pdh = ctypes.WinDLL("pdh.dll")
+            query = wintypes.HANDLE()
+            if pdh.PdhOpenQueryW(None, 0, ctypes.byref(query)) != 0:
+                return None
+            counter = wintypes.HANDLE()
+            rc = pdh.PdhAddEnglishCounterW(
+                query,
+                ctypes.c_wchar_p(_UTILITY_COUNTER_PATH),
+                0,
+                ctypes.byref(counter),
+            )
+            if rc != 0:
+                pdh.PdhCloseQuery(query)
+                return None
+            pdh.PdhCollectQueryData(query)  # 建立基线，这一次的值不可用
+            return pdh, query, counter, ctypes, _Value
+        except Exception:
+            return None
+
+    def poll(self):
+        """取一次读数（百分比）。首次调用、计数器失效或异常时返回 None。"""
+        if self._broken:
+            return None
+        pdh, query, counter, ctypes, value_cls = self._parts
+        try:
+            if pdh.PdhCollectQueryData(query) != 0:
+                return None
+            value = value_cls()
+            rc = pdh.PdhGetFormattedCounterValue(
+                counter, _PDH_FMT_DOUBLE, None, ctypes.byref(value)
+            )
+            if rc != 0 or int(value.CStatus) not in _PDH_CSTATUS_OK:
+                return None
+            return max(min(float(value.doubleValue), 100.0), 0.0)
+        except Exception:
+            self._broken = True
+            return None
+
+    def close(self) -> None:
+        """释放 PDH 查询句柄。每次查询都新建、用完即关，避免句柄泄漏。"""
+        if self._broken or not self._parts:
+            return
+        pdh, query = self._parts[0], self._parts[1]
+        try:
+            pdh.PdhCloseQuery(query)
+        except Exception:
+            pass
+        self._broken = True
+
+
+
+
 def _cpu_freq() -> dict:
     """当前频率与标称最高频率（单位 MHz）。
 
@@ -391,12 +481,20 @@ def _process_count() -> int:
     return len(pids)
 
 
-def collect(sample_interval: float = 0.5, with_processes: bool = False, top_n: int = 5) -> dict:
+def collect(
+    sample_interval: float = 0.5,
+    with_processes: bool = False,
+    top_n: int = 5,
+    cpu_metric: str = "time",
+) -> dict:
     """采集一次快照。
 
-    为了拿到"当前瞬时"的 CPU 与网络/磁盘速率，这里必须做两次采样取差值。
+    为了拿到"当前瞬时"的网络/磁盘速率，这里必须做两次采样取差值。
     sample_interval 是两次采样之间的间隔，0.5s 足够稳定，又不会让用户等太久。
     调用方应当用 asyncio.to_thread 包一层，避免阻塞事件循环。
+
+    CPU 占用只在这两次采样之间算，平时不占用任何 CPU（无后台线程）。
+    cpu_metric="utility" 时读 Windows 任务管理器同口径的 % Processor Utility。
 
     进程 TOP 列表不在本函数内采集（Windows 上遍历进程表很慢），
     请使用 collect_processes 配合后台定时缓存。
@@ -415,6 +513,9 @@ def collect(sample_interval: float = 0.5, with_processes: bool = False, top_n: i
     cpu0, cpu0_core = _cpu_snapshot()
     net0 = _net_counters()
     dio0 = _disk_io_counters()
+    # 任务管理器口径的计数器必须在窗口两端各采一次才能出值，
+    # 构造时已经建立了基线，这里只留引用，窗口结束后再 poll。
+    utility = _UtilityCounter() if str(cpu_metric).lower() == "utility" else None
     t0 = time.monotonic()
 
     if sample_interval > 0:
@@ -424,6 +525,9 @@ def collect(sample_interval: float = 0.5, with_processes: bool = False, top_n: i
     cpu1, cpu1_core = _cpu_snapshot()
     net1 = _net_counters()
     dio1 = _disk_io_counters()
+    utility_pct = utility.poll() if utility else None
+    if utility is not None:
+        utility.close()
     t1 = time.monotonic()
 
     elapsed = max(t1 - t0, 1e-6)
@@ -453,11 +557,17 @@ def collect(sample_interval: float = 0.5, with_processes: bool = False, top_n: i
     boot_time = static.get("boot_time")
     uptime = max(now - boot_time, 0) if boot_time else 0
 
-    cpu_percent = _usage_between(cpu0, cpu1)
+    # --- CPU：窗口内两次采样的差值，无后台线程 ---
+    time_pct = _usage_between(cpu0, cpu1)
     per_core = [
         _usage_between(before, after)
         for before, after in zip(cpu0_core, cpu1_core)
     ]
+    if utility_pct is not None:
+        percent, metric = utility_pct, "utility"
+    else:
+        percent, metric = time_pct, "time"
+
     freq = _cpu_freq()
 
     return {
@@ -467,10 +577,12 @@ def collect(sample_interval: float = 0.5, with_processes: bool = False, top_n: i
         "uptime": uptime,
         "load_avg": _load_avg(),
         "cpu": {
-            "percent": round(cpu_percent, 1),
+            "percent": round(float(percent or 0.0), 1),
+            "instant": round(float(time_pct), 1),
             "per_core": [round(v, 1) for v in per_core],
             "freq": freq["current"],
             "freq_max": freq["max"],
+            "metric": metric,
         },
         "memory": {
             "total": getattr(mem, "total", 0),
@@ -573,7 +685,8 @@ def build_text_report(data: dict) -> str:
         f"【{static['hostname']}】{static['os_name']}",
         f"处理器：{static['cpu_model']}",
         f"核心：{static['cpu_phys']} 物理 / {static['cpu_logical']} 逻辑",
-        f"CPU：{cpu['percent']:.1f}%{freq_text}",
+        f"CPU：{cpu['percent']:.1f}%{freq_text}"
+        + ("（任务管理器口径）" if cpu.get("metric") == "utility" else ""),
         f"内存：{fmt_bytes(mem['used'])} / {fmt_bytes(mem['total'])} ({mem['percent']:.1f}%)",
         f"运行时长：{fmt_uptime(data['uptime'])}",
         f"网络：↓ {fmt_rate(net['down_rate'])}  ↑ {fmt_rate(net['up_rate'])}",

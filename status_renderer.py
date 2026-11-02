@@ -468,7 +468,14 @@ def render(data: dict, config: dict | None = None) -> Image.Image:
     cores = int(static.get("cpu_logical", 0) or 0)
     freq_text = _freq_text(cpu)
     cpu_detail = " · ".join(p for p in (f"{cores} 线程" if cores else "", freq_text) if p)
-    cpu_sub = _truncate(canvas, str(static.get("cpu_model", "-")), CONTENT_W / 2 - 30, 9.5)
+    # CPU 数字用的是哪种口径，直接在卡片上标出来，避免和任务管理器对不上时产生误会
+    metric_note = "任务管理器口径" if str(cpu.get("metric")) == "utility" else "时间占比"
+    cpu_sub = _truncate(
+        canvas,
+        f"{metric_note} · {static.get('cpu_model', '-')}",
+        CONTENT_W / 2 - 30,
+        9.5,
+    )
     mem_detail = f"{fmt_bytes(memory.get('used', 0))} / {fmt_bytes(memory.get('total', 0))}"
     mem_sub = f"可用 {fmt_bytes(memory.get('available', 0))}"
 
